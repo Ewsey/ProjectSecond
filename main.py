@@ -21,4 +21,4 @@ while 1:
         if event.type == pygame.QUIT:
             exit()
 
-    pygame.display.update()
+    pygame.display.update() 
