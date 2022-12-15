@@ -1,6 +1,12 @@
+import os
 import telebot
+from telebot.types import InputFile
 import pickle
 from game import Game, Alph, Nums
+
+# init bot
+token = '5866341366:AAF7gOQ30992B2zgP38ZYk1Vod-EM3i0XTA'
+bot = telebot.TeleBot(token)
 
 DBD = './'
 Matches = []
@@ -9,7 +15,7 @@ HelloText = 'Привет! Это бот для игры в шахматы с д
 HelpText = '''Чтобы играть с другом напиши его никнейм.
 Если он запускал этот бот я отправлю ему запрос
 Если ты уже играешь партию то нужно отправить свой ход в формате е2е4
-Для досрочного окончания партии напиши endgame'''
+Для досрочного окончания партии напиши /end'''
 TryingConnectText = 'Отправляю запрос на подключение...'
 UserNotInBaseText = 'К сожалению такого пользователя нет в базе'
 NotValidMove = 'Такой ход невозможен'
@@ -21,6 +27,7 @@ YouAlreadyPlaying = 'Нельзя начать новую игру до заве
 UserAlreadyPlaying = 'Пользователь уже начал игру с другим человеком'
 GameIsOver = ['Вы победили!', 'Вы проиграли...']
 NowYourMove = 'Соперник сделал ход'
+YouNotInGame = 'Невозможно закончить игру: Вас нет в списке активных игр'
 
 def load_users():
     try:
@@ -41,13 +48,37 @@ def start_game(u1, u2, i1, i2):
     Games[u2] = game
     bot.send_message(i1, GameInstruction)
     bot.send_message(i2, GameInstruction)
-    bot.send_message(i1, game.to_text_message())
-    bot.send_message(i2, game.to_text_message())
+    send_field(i1, game)
+    send_field(i2, game)
 
 
+def end_game(game, user=False):
+    if user: # Проигрывает сдавшийся
+        if user == game.u1:
+            win1 = True
+            win2 = False
+        else:
+            win1 = False
+            win2 = True
+    else:
+        win1 = 1 == game.winner
+        win2 = 0 == game.winner
+    send_field(game.i1, game)
+    bot.send_message(game.i1, GameIsOver[win1])
+    send_field(game.i2, game)
+    bot.send_message(game.i2, GameIsOver[win2])
+    Games.pop(game.u1)
+    if game.u1 != game.u2:
+        Games.pop(game.u2)
 
-token = '5866341366:AAF7gOQ30992B2zgP38ZYk1Vod-EM3i0XTA'
-bot = telebot.TeleBot(token)
+
+def send_field(id, game):
+    if not os.path.isdir('temp'):
+        os.mkdir('temp')
+    path = game.to_image()
+    image = InputFile(path)
+    bot.send_photo(id, image)
+
 
 
 @bot.message_handler(commands=['start'])
@@ -69,6 +100,18 @@ def start(message):
 @bot.message_handler(commands=['help'])
 def help_handler(message):
     bot.send_message(message.chat.id, HelpText)
+
+
+@bot.message_handler(commands=['end'])
+def end_game_handler(message):
+    user = message.from_user.username.lower()
+    id = message.chat.id
+    if user not in Games:
+        bot.send_message(id, YouNotInGame)
+        return
+    game = Games[user]
+    end_game(game, user)
+
 
 
 @bot.message_handler(func=lambda message: message.text[0] == '@')
@@ -121,20 +164,15 @@ def handle_move(message):
         bot.send_message(message.chat.id, NotYourMove)
     elif valid_move == 3:
         # конец игры
-        bot.send_message(game.i1, game.to_text_message())
-        bot.send_message(game.i1, GameIsOver[1 == game.winner])
-        bot.send_message(game.i2, game.to_text_message())
-        bot.send_message(game.i2, GameIsOver[0 == game.winner])
-        Games.pop(game.u1)
-        if game.u1 != game.u2:
-            Games.pop(game.u2)
+        end_game(game)
     else:
         # корректный ход
-        bot.send_message(message.chat.id, game.to_text_message())
         bot.send_message(message.chat.id, WaitOpponentsMove)
+        send_field(message.chat.id, game)
         opponentid = game.i2 if game.move%2 else game.i1
-        bot.send_message(opponentid, game.to_text_message())
         bot.send_message(opponentid, NowYourMove)
+        send_field(opponentid, game)
+
 
 users = load_users()
 print(users)
