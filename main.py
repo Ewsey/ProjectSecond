@@ -119,12 +119,13 @@ def start(message):
     """ При подключении нового аккаунта добавляем его в users и приветствуем
     """
     global users
-    username = message.from_user.username 
-    if username is not None: 
-        username = username.lower() 
-    else: 
+    username = message.from_user.username
+    if username is not None:
+        username = username.lower()
+    else:
         bot.send_message(message.chat.id, 'Придумайте себе ник в настройках')
         return
+    userid = message.chat.id
     print(f'New user: {username} id: {userid}')
     if username not in users:
         bot.send_message(userid, HelloText)
