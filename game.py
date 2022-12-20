@@ -53,6 +53,13 @@ class Game:
             if u == self.u2 and self.move%2 == 1:
                 return 2
 
+        # Не рокировка ли это? (обрабатываем отдельно)
+        castling = self.process_castling(move)
+        if type(castling) == str:
+            return 4
+        if castling is True:
+            return 1
+
         ch1, num1, ch2, num2 = move
         # Есть ли на выбранной клетке фигура?
         figure = False
@@ -81,6 +88,9 @@ class Game:
         return 1
 
     def comment_to_move(self, move):
+        comment = self.process_castling(move)
+        if comment:
+            return comment
         ch1, num1, ch2, num2 = move
         figure = False
         for fig in self.figures:
@@ -91,6 +101,56 @@ class Game:
         if type(figure) != King:
             return figure.check_move(ch2, num2)
         return figure.check_move(ch2, num2, True)
+
+    def process_castling(self, move):
+        ch1, num1, ch2, num2 = move
+        if not (move in ['e1h1', 'e1a1'] and self.move%2==1) and not (move in ['e8a8', 'e8a1'] and self.move%2==0):
+            return
+
+        king = False
+        rook = False
+        for fig in self.figures:
+            if fig.white == self.move%2:
+                if type(fig) == King and fig.ch == ch1 and fig.num == num1:
+                    king = fig
+                if type(fig) == Rook and fig.ch == ch2 and fig.num == num2:
+                    rook = fig
+        if not king:
+            return 'на этой позиции нет короля'
+        if not rook:
+            return 'на этой позиции нет ладьи'
+        if not king.can_castling:
+            return 'король не может сделать рокировку'
+        if not rook.can_castling:
+            return 'ладья не может сделать рокировку'
+
+        field = self.field_of_figures()
+        if move == 'e1h1':
+            white_space = field[0][5:7]
+            king_pos = 'g1'
+            rook_pos = 'f1'
+        if move == 'e1a1':
+            white_space = field[0][1:4]
+            king_pos = 'c1'
+            rook_pos = 'd1'
+        if move == 'e8a8':
+            white_space = field[7][5:7]
+            king_pos = 'g8'
+            rook_pos = 'f8'
+        if move == 'e8a8':
+            white_space = field[7][1:4]
+            king_pos = 'c8'
+            rook_pos = 'd8'
+        if set(white_space) != {0}:
+            return 'между королём и ладьёй лишние фигуры'
+
+        king.ch = king_pos[0]
+        king.num = king_pos[1]
+        rook.ch = rook_pos[0]
+        rook.num = rook_pos[1]
+        king.can_castling = False
+        rook.can_castling = False
+        return True
 
     def field_of_figures(self):
         field = [[0] * 8 for _ in range(8)]
@@ -175,6 +235,8 @@ class Figure:
             if (ch, num) in self.interfering_figures:
                 return 'мешают другие фигуры'
             return 'невозможный ход'
+        if type(self) == Rook:
+            self.can_castling = False
         return True
 
 
@@ -230,18 +292,26 @@ class Pawn(Figure):
         moves = []
         m = Nums.index(self.num)  # string
         n = Alph.index(self.ch)  # column
-        if self.white:
-            moves.append((Alph[n+1], Nums[m+1]))
-            moves.append((Alph[n-1], Nums[m+1]))
-        else:
-            moves.append((Alph[n+1], Nums[m-1]))
-            moves.append((Alph[n-1], Nums[m-1]))
+        if self.white and m < 7:
+            if n < 7:
+                moves.append((Alph[n+1], Nums[m+1]))
+            if n > 0:
+                moves.append((Alph[n-1], Nums[m+1]))
+        elif m > 0:
+            if n < 7:
+                moves.append((Alph[n+1], Nums[m-1]))
+            if n > 0:
+                moves.append((Alph[n-1], Nums[m-1]))
         return moves
 
 
 class Rook(Figure):
     wimage = 'images/white rook.png'
     bimage = 'images/black rook.png'
+
+    def __init__(self, *args):
+        super().__init__(*args)
+        self.can_castling = True
 
     def set_possible_moves(self):
         field = self.game.field_of_figures()
@@ -325,7 +395,7 @@ class Bishop(Figure):
                 moves.append(move)
             else:
                 int_fig.append(move)
-            if field[n+i][m+i]:
+            if field[n+i][m+i] and not interfering:
                 interfering = True
                 if field[n+i][m+i] == ('w' if self.white else 'b'):
                     moves.remove(move)
@@ -338,7 +408,7 @@ class Bishop(Figure):
                 moves.append(move)
             else:
                 int_fig.append(move)
-            if field[n-i][m-i]:
+            if field[n-i][m-i] and not interfering:
                 interfering = True
                 if field[n-i][m-i] == ('w' if self.white else 'b'):
                     moves.remove(move)
@@ -351,7 +421,7 @@ class Bishop(Figure):
                 moves.append(move)
             else:
                 int_fig.append(move)
-            if field[n-i][m+i]:
+            if field[n-i][m+i] and not interfering:
                 interfering = True
                 if field[n-i][m+i] == ('w' if self.white else 'b'):
                     moves.remove(move)
@@ -364,7 +434,7 @@ class Bishop(Figure):
                 moves.append(move)
             else:
                 int_fig.append(move)
-            if field[n+i][m-i]:
+            if field[n+i][m-i] and not interfering:
                 interfering = True
                 if field[n+i][m-i] == ('b' if self.white else 'w'):
                     moves.remove(move)
@@ -427,6 +497,10 @@ class Knight(Figure):
 class King(Figure):
     wimage = 'images/white king.png'
     bimage = 'images/black king.png'
+
+    def __init__(self, *args):
+        super().__init__(*args)
+        self.can_castling = True
 
     def all_moves(self):
         n = Nums.index(self.num)  # string
@@ -508,4 +582,5 @@ class King(Figure):
             if (ch, num) in self.interfering_figures:
                 return 'мешают другие фигуры'
             return 'невозможный ход'
+        self.can_castling = False
         return True
